@@ -1,0 +1,80 @@
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: javabin
+      POSTGRES_PASSWORD: javabin
+      POSTGRES_DB: javabinkids
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U javabin -d javabinkids"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      - "5175:5175"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      DATABASE_URL: postgres://javabin:javabin@db:5432/javabinkids
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_your_api_key}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      BASE_URL: http://localhost:5175
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: javabin
+      PGPASSWORD: javabin
+      PGDATABASE: javabinkids
+      BACKUP_KEEP_DAYS: 14
+    volumes:
+      - backups:/backups
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        echo "Backup service started. Running daily at 03:00."
+        while true; do
+          NOW=$$(date +%H%M)
+          if [ "$$NOW" = "0300" ]; then
+            TIMESTAMP=$$(date +%Y%m%d-%H%M%S)
+            FILENAME="javabinkids-$$TIMESTAMP.sql.gz"
+            echo "[$$TIMESTAMP] Starting backup..."
+            pg_dump | gzip > /backups/$$FILENAME
+            if [ $$? -eq 0 ]; then
+              echo "[$$TIMESTAMP] Backup saved: $$FILENAME ($$(du -h /backups/$$FILENAME | cut -f1))"
+            else
+              echo "[$$TIMESTAMP] ERROR: Backup failed!"
+            fi
+            # Delete backups older than BACKUP_KEEP_DAYS
+            find /backups -name "javabinkids-*.sql.gz" -mtime +$$BACKUP_KEEP_DAYS -delete
+            echo "[$$TIMESTAMP] Cleanup done. Current backups:"
+            ls -lh /backups/javabinkids-*.sql.gz 2>/dev/null || echo "  (none)"
+            sleep 60
+          fi
+          sleep 50
+        done
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  backups:
