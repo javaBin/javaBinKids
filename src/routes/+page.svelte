@@ -14,7 +14,7 @@
 		<p class="hero-text">{data.heroText}</p>
 		{#if data.nextEvent}
 			<a href="/arrangementer/{data.nextEvent.arrangementId}" class="btn btn-primary">
-				Se neste arrangement
+				Se neste arrangement ({new Date(data.nextEvent.date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long' })})
 			</a>
 		{:else}
 			<p class="hero-muted">Ingen kommende arrangementer ennå — følg med!</p>

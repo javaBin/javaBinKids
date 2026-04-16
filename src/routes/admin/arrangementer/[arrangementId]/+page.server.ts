@@ -1,7 +1,8 @@
 import { db } from '$lib/server/db';
-import { events, courses, registrations } from '$lib/server/db/schema';
+import { events, courses, registrations, submissions } from '$lib/server/db/schema';
 import { eq, and, count, ne, asc } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
+import { renderMarkdown } from '$lib/server/markdown';
 
 export async function load({ params }) {
 	const [event] = await db
@@ -60,12 +61,23 @@ export async function load({ params }) {
 		courseRegistrations[courseId] = regs;
 	}
 
+	const eventSubmissions = await db
+		.select()
+		.from(submissions)
+		.where(eq(submissions.arrangementId, params.arrangementId))
+		.orderBy(asc(submissions.createdAt));
+
 	return {
 		event,
 		courses: eventCourses.map((r) => ({
 			...r.course,
 			confirmedCount: Number(r.confirmedCount)
 		})),
-		courseRegistrations
+		courseRegistrations,
+		submissions: await Promise.all(eventSubmissions.map(async (s) => ({
+			...s,
+			descriptionHtml: await renderMarkdown(s.description),
+			speakerBioHtml: await renderMarkdown(s.speakerBio)
+		})))
 	};
 }

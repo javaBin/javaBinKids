@@ -11,7 +11,7 @@ export async function PATCH({ params, request, cookies }) {
 	const body = await request.json();
 	const data = body.event;
 
-	const dateFields = ['date', 'registrationOpens', 'registrationCloses'] as const;
+	const dateFields = ['date', 'registrationOpens', 'registrationCloses', 'submissionDeadline'] as const;
 	for (const field of dateFields) {
 		if (typeof data[field] === 'string') {
 			data[field] = new Date(data[field]);

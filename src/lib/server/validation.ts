@@ -29,6 +29,24 @@ export const courseSchema = z.object({
 	maxParticipants: z.number().int().min(1)
 });
 
+export const submissionSchema = z.object({
+	arrangementId: z.string().uuid(),
+	speakerName: z.string().min(1, 'Navn er påkrevd'),
+	speakerEmail: z.string().email('Ugyldig e-postadresse'),
+	speakerBio: z.string().min(1, 'Bio er påkrevd'),
+	title: z.string().min(1, 'Tittel er påkrevd'),
+	description: z.string().min(1, 'Beskrivelse er påkrevd'),
+	equipmentRequirements: z.string().optional(),
+	ageMin: z.number().int().min(3),
+	ageMax: z.number().int().max(18),
+	maxParticipants: z.number().int().min(1)
+});
+
+export const submissionUpdateSchema = submissionSchema.omit({ arrangementId: true });
+
+export type SubmissionInput = z.infer<typeof submissionSchema>;
+export type SubmissionUpdateInput = z.infer<typeof submissionUpdateSchema>;
+
 export const loginSchema = z.object({
 	username: z.string().min(1, 'Brukernavn er påkrevd'),
 	password: z.string().min(1, 'Passord er påkrevd')

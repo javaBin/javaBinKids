@@ -29,7 +29,10 @@
 	let editRegOpens = $state(toLocalDatetime(data.event.registrationOpens));
 	let editRegCloses = $state(toLocalDatetime(data.event.registrationCloses));
 	let editImageUrl = $state(data.event.imageUrl ?? '');
+	let editOpenForSubmissions = $state(data.event.openForSubmissions);
+	let editSubmissionDeadline = $state(data.event.submissionDeadline ? toLocalDatetime(data.event.submissionDeadline) : '');
 	let saving = $state(false);
+	let expandedSubmissionId = $state<string | null>(null);
 
 	function toLocalDatetime(d: string | Date): string {
 		const date = new Date(d);
@@ -53,6 +56,8 @@
 					location: editLocation,
 					registrationOpens: new Date(editRegOpens).toISOString(),
 					registrationCloses: new Date(editRegCloses).toISOString(),
+					openForSubmissions: editOpenForSubmissions,
+					submissionDeadline: editSubmissionDeadline ? new Date(editSubmissionDeadline).toISOString() : null,
 					imageUrl: editImageUrl || null
 				}
 			})
@@ -203,6 +208,28 @@
 		toast.show('Påmelding avbestilt');
 		invalidateAll();
 	}
+
+	async function approveSubmission(submissionId: string) {
+		if (!confirm('Godkjenne dette forslaget? Det opprettes et kurs automatisk.')) return;
+		const res = await fetch(`/api/submissions/${submissionId}/approve`, { method: 'POST' });
+		if (res.ok) {
+			toast.show('Forslag godkjent — kurs opprettet');
+			invalidateAll();
+		} else {
+			toast.show('Kunne ikke godkjenne forslaget', 'error');
+		}
+	}
+
+	async function rejectSubmission(submissionId: string) {
+		if (!confirm('Avvise dette forslaget?')) return;
+		const res = await fetch(`/api/submissions/${submissionId}/reject`, { method: 'POST' });
+		if (res.ok) {
+			toast.show('Forslag avvist');
+			invalidateAll();
+		} else {
+			toast.show('Kunne ikke avvise forslaget', 'error');
+		}
+	}
 </script>
 
 <a href="/admin/arrangementer" class="back-link">&larr; Tilbake</a>
@@ -251,6 +278,21 @@
 			<div class="form-group">
 				<label for="eRegCloses">Påmelding stenger</label>
 				<input id="eRegCloses" type="datetime-local" bind:value={editRegCloses} required />
+			</div>
+		</div>
+		<div class="form-row">
+			<div class="form-group">
+				<label class="toggle-label">
+					<span class="toggle-track" class:active={editOpenForSubmissions}>
+						<input type="checkbox" bind:checked={editOpenForSubmissions} />
+						<span class="toggle-thumb"></span>
+					</span>
+					<span>Åpen for innlegg</span>
+				</label>
+			</div>
+			<div class="form-group">
+				<label for="eSubDeadline">Frist for innlegg</label>
+				<input id="eSubDeadline" type="datetime-local" bind:value={editSubmissionDeadline} />
 			</div>
 		</div>
 		<div class="form-group">
@@ -405,6 +447,65 @@
 	{/each}
 </div>
 
+<h2>Innsendte forslag ({data.submissions.length})</h2>
+
+{#if data.submissions.length === 0}
+	<p class="no-regs">Ingen innsendte forslag ennå.</p>
+{:else}
+	<div class="courses-list">
+		{#each data.submissions as sub (sub.submissionId)}
+			<div class="card course-card-admin">
+				<div class="course-header-row">
+					<div>
+						<strong>{sub.title}</strong>
+						<span class="meta">
+							{sub.speakerName} · {sub.ageMin}–{sub.ageMax} år · Maks {sub.maxParticipants} deltakere
+							{#if sub.status === 'submitted'}
+								<span class="badge badge-warning">Venter</span>
+							{:else if sub.status === 'approved'}
+								<span class="badge badge-success">Godkjent</span>
+							{:else if sub.status === 'rejected'}
+								<span class="badge badge-error">Avvist</span>
+							{/if}
+						</span>
+					</div>
+					<div class="course-actions">
+						<button class="btn btn-outline btn-sm"
+							onclick={() => expandedSubmissionId = expandedSubmissionId === sub.submissionId ? null : sub.submissionId}>
+							{expandedSubmissionId === sub.submissionId ? 'Skjul' : 'Vis detaljer'}
+						</button>
+						{#if sub.status === 'submitted'}
+							<button class="btn btn-primary btn-sm" onclick={() => approveSubmission(sub.submissionId)}>Godkjenn</button>
+							<button class="btn btn-outline btn-sm danger" onclick={() => rejectSubmission(sub.submissionId)}>Avvis</button>
+						{/if}
+					</div>
+				</div>
+
+				{#if expandedSubmissionId === sub.submissionId}
+					<div class="submission-details">
+						<div class="detail-section">
+							<strong>E-post:</strong> <a href="mailto:{sub.speakerEmail}">{sub.speakerEmail}</a>
+						</div>
+						<div class="detail-section">
+							<strong>Bio:</strong>
+							<div class="markdown-content">{@html sub.speakerBioHtml}</div>
+						</div>
+						<div class="detail-section">
+							<strong>Beskrivelse:</strong>
+							<div class="markdown-content">{@html sub.descriptionHtml}</div>
+						</div>
+						{#if sub.equipmentRequirements}
+							<div class="detail-section">
+								<strong>Utstyrsbehov:</strong> {sub.equipmentRequirements}
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		{/each}
+	</div>
+{/if}
+
 <style>
 	.back-link {
 		display: inline-block;
@@ -513,6 +614,75 @@
 	.danger:hover {
 		background: var(--color-error);
 		color: white;
+	}
+
+	.submission-details {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--color-border);
+	}
+	.detail-section {
+		margin-bottom: 0.75rem;
+		color: var(--color-text-muted);
+		font-size: 0.9rem;
+	}
+	.detail-section strong {
+		color: var(--color-text);
+	}
+	.detail-section p {
+		margin-top: 0.25rem;
+	}
+	.detail-section .markdown-content :global(h1) { font-size: 1.2rem; margin: 0.75rem 0 0.25rem; }
+	.detail-section .markdown-content :global(h2) { font-size: 1.1rem; margin: 0.75rem 0 0.25rem; }
+	.detail-section .markdown-content :global(p) { margin-bottom: 0.5rem; }
+	.detail-section .markdown-content :global(ul), .detail-section .markdown-content :global(ol) { margin: 0.25rem 0 0.5rem 1.5rem; }
+	.detail-section .markdown-content :global(li) { margin-bottom: 0.15rem; }
+
+	.toggle-label {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		cursor: pointer;
+		font-weight: 600;
+		color: var(--color-text-muted);
+		margin-top: 1.6rem;
+	}
+
+	.toggle-track {
+		position: relative;
+		display: inline-block;
+		width: 44px;
+		height: 24px;
+		background: var(--color-border);
+		border-radius: 12px;
+		transition: background 0.2s;
+		flex-shrink: 0;
+	}
+
+	.toggle-track.active {
+		background: var(--color-heading);
+	}
+
+	.toggle-track input {
+		position: absolute;
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+
+	.toggle-thumb {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 20px;
+		height: 20px;
+		background: var(--color-bg-deep);
+		border-radius: 50%;
+		transition: transform 0.2s;
+	}
+
+	.toggle-track.active .toggle-thumb {
+		transform: translateX(20px);
 	}
 
 	@media (max-width: 768px) {

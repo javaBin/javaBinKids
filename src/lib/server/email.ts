@@ -1,11 +1,21 @@
-import { Resend } from 'resend';
+import sgMail from '@sendgrid/mail';
 
-let resendInstance: Resend | null = null;
-function getResend() {
-	if (!resendInstance) {
-		resendInstance = new Resend(process.env.RESEND_API_KEY);
+let initialized = false;
+function getSendGrid() {
+	if (!initialized) {
+		sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+		initialized = true;
 	}
-	return resendInstance;
+	return sgMail;
+}
+
+async function sendEmail(params: { to: string; subject: string; html: string }) {
+	await getSendGrid().send({
+		from: FROM_EMAIL,
+		to: params.to,
+		subject: params.subject,
+		html: params.html
+	});
 }
 
 const FROM_EMAIL = 'javaBin Kids <kids@javabin.no>';
@@ -70,8 +80,7 @@ export async function sendConfirmationEmail(params: {
 	const confirmUrl = `${BASE_URL}/bekreftelse/${params.registrationId}?token=${params.cancellationToken}`;
 	const cancelUrl = `${BASE_URL}/avmelding/${params.registrationId}?token=${params.cancellationToken}`;
 
-	await getResend().emails.send({
-		from: FROM_EMAIL,
+	await sendEmail({
 		to: params.parentEmail,
 		subject: `Påmelding bekreftet: ${params.courseTitle}`,
 		html: emailLayout(`
@@ -100,8 +109,7 @@ export async function sendWaitlistEmail(params: {
 	const confirmUrl = `${BASE_URL}/bekreftelse/${params.registrationId}?token=${params.cancellationToken}`;
 	const cancelUrl = `${BASE_URL}/avmelding/${params.registrationId}?token=${params.cancellationToken}`;
 
-	await getResend().emails.send({
-		from: FROM_EMAIL,
+	await sendEmail({
 		to: params.parentEmail,
 		subject: `Venteliste: ${params.courseTitle}`,
 		html: emailLayout(`
@@ -123,8 +131,7 @@ export async function sendPromotionEmail(params: {
 	eventTitle: string;
 	eventDate: string;
 }) {
-	await getResend().emails.send({
-		from: FROM_EMAIL,
+	await sendEmail({
 		to: params.parentEmail,
 		subject: `Plass ledig: ${params.courseTitle}`,
 		html: emailLayout(`
@@ -146,8 +153,7 @@ export async function sendCancellationEmail(params: {
 	childName: string;
 	courseTitle: string;
 }) {
-	await getResend().emails.send({
-		from: FROM_EMAIL,
+	await sendEmail({
 		to: params.parentEmail,
 		subject: `Avmelding bekreftet: ${params.courseTitle}`,
 		html: emailLayout(`
@@ -167,8 +173,7 @@ export async function sendReminderEmail(params: {
 	eventDate: string;
 	eventLocation: string;
 }) {
-	await getResend().emails.send({
-		from: FROM_EMAIL,
+	await sendEmail({
 		to: params.parentEmail,
 		subject: `Påminnelse: ${params.courseTitle} nærmer seg!`,
 		html: emailLayout(`
@@ -181,6 +186,71 @@ export async function sendReminderEmail(params: {
 				${info('Kurs', params.courseTitle)}
 			`)}
 			${paragraph('Vi gleder oss til å se dere!')}
+		`)
+	});
+}
+
+export async function sendSubmissionReceivedEmail(params: {
+	speakerEmail: string;
+	speakerName: string;
+	title: string;
+	eventTitle: string;
+	submissionId: string;
+	editToken: string;
+	submissionDeadline: string;
+	arrangementId: string;
+}) {
+	const editUrl = `${BASE_URL}/arrangementer/${params.arrangementId}/innlegg/${params.submissionId}/rediger?token=${params.editToken}`;
+
+	await sendEmail({
+		to: params.speakerEmail,
+		subject: `Forslag mottatt: ${params.title}`,
+		html: emailLayout(`
+			${heading(`Hei ${params.speakerName}!`)}
+			${paragraph(`Vi har mottatt forslaget ditt <strong>${params.title}</strong> til <strong>${params.eventTitle}</strong>.`)}
+			${paragraph(`Du kan redigere forslaget ditt frem til <strong>${params.submissionDeadline}</strong>.`)}
+			${button('Rediger forslaget', editUrl)}
+			${paragraph('Du vil få beskjed på e-post når forslaget er vurdert.')}
+		`)
+	});
+}
+
+export async function sendSubmissionApprovedEmail(params: {
+	speakerEmail: string;
+	speakerName: string;
+	title: string;
+	eventTitle: string;
+	eventDate: string;
+}) {
+	await sendEmail({
+		to: params.speakerEmail,
+		subject: `Forslag godkjent: ${params.title}`,
+		html: emailLayout(`
+			${heading(`Gratulerer, ${params.speakerName}!`)}
+			${paragraph(`Forslaget ditt <strong>${params.title}</strong> er godkjent og blir med på <strong>${params.eventTitle}</strong>.`)}
+			${infoTable(`
+				${info('Arrangement', params.eventTitle)}
+				${info('Dato', params.eventDate)}
+				${info('Kurs', params.title)}
+			`)}
+			${paragraph('Vi gleder oss til å se deg!')}
+		`)
+	});
+}
+
+export async function sendSubmissionRejectedEmail(params: {
+	speakerEmail: string;
+	speakerName: string;
+	title: string;
+	eventTitle: string;
+}) {
+	await sendEmail({
+		to: params.speakerEmail,
+		subject: `Forslag ikke tatt med: ${params.title}`,
+		html: emailLayout(`
+			${heading(`Hei ${params.speakerName}`)}
+			${paragraph(`Takk for forslaget ditt <strong>${params.title}</strong> til <strong>${params.eventTitle}</strong>.`)}
+			${paragraph('Dessverre har vi ikke mulighet til å ta med dette forslaget denne gangen. Vi håper du vil sende inn forslag igjen ved en senere anledning!')}
 		`)
 	});
 }

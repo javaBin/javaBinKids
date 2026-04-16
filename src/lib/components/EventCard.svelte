@@ -7,6 +7,8 @@
 			date: Date;
 			location: string;
 			cancelled: boolean;
+			openForSubmissions: boolean;
+			submissionDeadline: Date | null;
 		};
 	}
 
@@ -20,6 +22,12 @@
 	}));
 
 	const isPast = $derived(new Date(event.date) < new Date());
+
+	const submissionsOpen = $derived(
+		event.openForSubmissions &&
+		event.submissionDeadline &&
+		new Date(event.submissionDeadline) > new Date()
+	);
 </script>
 
 <a href="/arrangementer/{event.arrangementId}" class="card event-card">
@@ -29,6 +37,9 @@
 		<span class="badge badge-warning">Gjennomført</span>
 	{:else}
 		<span class="badge badge-success">Kommende</span>
+	{/if}
+	{#if submissionsOpen}
+		<span class="badge badge-info">Åpen for innlegg</span>
 	{/if}
 	<h3>{event.title}</h3>
 	<p class="event-meta">{dateStr} — {event.location}</p>
@@ -42,4 +53,8 @@
 	.event-desc { color: var(--color-text-muted); font-size: 0.95rem; }
 	.event-desc :global(p) { margin: 0; }
 	.event-desc :global(p + p) { margin-top: 0.5rem; }
+	.badge-info {
+		background: rgba(126, 200, 200, 0.2);
+		color: #7ec8c8;
+	}
 </style>

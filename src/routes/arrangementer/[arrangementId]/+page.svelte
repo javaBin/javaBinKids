@@ -36,6 +36,17 @@
 		</div>
 	{/if}
 
+	{#if data.submissionsOpen}
+		<div class="submission-cta">
+			<h2>Har du en idé til et kurs?</h2>
+			<p>Vi tar imot forslag til kurs og aktiviteter for dette arrangementet.</p>
+			{#if data.event.submissionDeadline}
+				<p class="deadline">Frist: {new Date(data.event.submissionDeadline).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+			{/if}
+			<a href="/arrangementer/{data.event.arrangementId}/innlegg" class="btn btn-primary">Send inn forslag</a>
+		</div>
+	{/if}
+
 	{#if data.courses.length > 0}
 		<h2>Kurs og aktiviteter</h2>
 		<div class="courses-grid">
@@ -61,4 +72,14 @@
 	.notice { margin-bottom: 2rem; }
 	.muted { color: var(--color-text-muted); font-size: 0.9rem; }
 	.courses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+	.submission-cta {
+		margin-bottom: 2rem;
+		background: rgba(126, 200, 200, 0.08);
+		border: 2px dashed rgba(126, 200, 200, 0.3);
+		border-radius: var(--radius-lg);
+		padding: 2rem;
+		text-align: center;
+	}
+	.submission-cta p { color: var(--color-text-muted); margin-bottom: 0.5rem; }
+	.submission-cta .deadline { font-size: 0.9rem; margin-bottom: 1rem; }
 </style>

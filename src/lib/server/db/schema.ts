@@ -16,6 +16,8 @@ export const events = pgTable('events', {
 	registrationOpens: timestamp().notNull(),
 	registrationCloses: timestamp().notNull(),
 	imageUrl: text(),
+	openForSubmissions: boolean().notNull().default(false),
+	submissionDeadline: timestamp(),
 	createdAt: timestamp().notNull().defaultNow(),
 	updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date())
 });
@@ -30,6 +32,24 @@ export const courses = pgTable('courses', {
 	ageMin: integer().notNull(),
 	ageMax: integer().notNull(),
 	maxParticipants: integer().notNull(),
+	createdAt: timestamp().notNull().defaultNow(),
+	updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date())
+});
+
+export const submissions = pgTable('submissions', {
+	submissionId: uuid().primaryKey().defaultRandom(),
+	arrangementId: uuid().notNull().references(() => events.arrangementId, { onDelete: 'restrict' }),
+	status: text().notNull().default('submitted'),
+	title: text().notNull(),
+	description: text().notNull(),
+	equipmentRequirements: text(),
+	ageMin: integer().notNull(),
+	ageMax: integer().notNull(),
+	maxParticipants: integer().notNull(),
+	speakerName: text().notNull(),
+	speakerEmail: text().notNull(),
+	speakerBio: text().notNull(),
+	editToken: uuid().notNull().defaultRandom(),
 	createdAt: timestamp().notNull().defaultNow(),
 	updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date())
 });

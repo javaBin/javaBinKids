@@ -36,6 +36,13 @@
       "when": 1773900060000,
       "tag": "0004_add_images_and_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774258800000,
+      "tag": "0005_add_submissions",
+      "breakpoints": true
     }
   ]
 }

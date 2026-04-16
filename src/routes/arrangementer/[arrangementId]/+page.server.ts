@@ -39,6 +39,11 @@ export async function load({ params }) {
 		new Date(event.registrationOpens) <= now &&
 		new Date(event.registrationCloses) >= now;
 
+	const submissionsOpen =
+		event.openForSubmissions &&
+		event.submissionDeadline !== null &&
+		new Date(event.submissionDeadline) > new Date();
+
 	const eventWithHtml = {
 		...event,
 		descriptionHtml: await renderMarkdown(event.description)
@@ -51,5 +56,5 @@ export async function load({ params }) {
 		}))
 	);
 
-	return { event: eventWithHtml, courses: coursesWithHtml, registrationOpen };
+	return { event: eventWithHtml, courses: coursesWithHtml, registrationOpen, submissionsOpen };
 }

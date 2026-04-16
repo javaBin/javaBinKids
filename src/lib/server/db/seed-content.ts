@@ -1,7 +1,18 @@
 import { db } from './index';
-import { siteContent, contactCards } from './schema';
+import { siteContent, contactCards, adminUsers } from './schema';
+import { hash } from 'bcrypt';
 
 async function seed() {
+	const username = process.env.ADMIN_USERNAME || 'admin';
+	const password = process.env.ADMIN_PASSWORD || 'changeme';
+	const passwordHash = await hash(password, 10);
+
+	await db
+		.insert(adminUsers)
+		.values({ username, passwordHash })
+		.onConflictDoNothing();
+
+	console.log(`Admin user "${username}" seeded.`);
 	await db
 		.insert(siteContent)
 		.values([

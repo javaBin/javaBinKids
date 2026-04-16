@@ -29,11 +29,11 @@
 		"vitest": "^4.1.0"
 	},
 	"dependencies": {
+		"@sendgrid/mail": "^8.1.6",
 		"bcrypt": "^6.0.0",
 		"drizzle-orm": "^0.45.1",
 		"marked": "^17.0.4",
 		"postgres": "^3.4.8",
-		"resend": "^6.9.4",
 		"zod": "^4.3.6"
 	}
 }
