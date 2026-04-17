@@ -12,7 +12,7 @@ Nettsiden presenterer arrangementer, håndterer påmelding med venteliste, og ha
 | Backend | SvelteKit server routes (`+page.server.ts`, `+server.ts`) |
 | Database | PostgreSQL 17 via [Drizzle ORM](https://orm.drizzle.team) |
 | Validering | [Zod](https://zod.dev) |
-| E-post | [Resend](https://resend.com) |
+| E-post | [SendGrid](https://sendgrid.com) |
 | Markdown | [marked](https://marked.js.org) (kursbeskrivelser) |
 | Auth | Cookie-basert sesjoner med bcrypt |
 | Infra | Docker Compose (dev + backup) |
@@ -57,10 +57,11 @@ Se `.env.example`:
 | Variabel | Beskrivelse |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `RESEND_API_KEY` | API-nøkkel fra [resend.com](https://resend.com) |
+| `SENDGRID_API_KEY` | API-nøkkel fra [sendgrid.com](https://sendgrid.com) |
 | `ADMIN_USERNAME` | Brukernavn for admin (brukes av seed) |
 | `ADMIN_PASSWORD` | Passord for admin (brukes av seed) |
 | `BASE_URL` | Offentlig URL for e-postlenker |
+| `EMAIL_SUBJECT_PREFIX` | (Valgfritt) Prefix som legges til alle e-post-emnelinjer. Nyttig for å skille test-e-poster fra produksjon, f.eks. `[DEV] `. |
 
 ## Prosjektstruktur
 
@@ -213,7 +214,7 @@ Prosjektet inkluderer en `Dockerfile` for produksjonsbygg med multi-stage build:
 docker build -t javabinkids .
 docker run -p 3000:3000 \
   -e DATABASE_URL=postgres://... \
-  -e RESEND_API_KEY=re_... \
+  -e SENDGRID_API_KEY=SG.... \
   -e BASE_URL=https://kids.javabin.no \
   javabinkids
 ```

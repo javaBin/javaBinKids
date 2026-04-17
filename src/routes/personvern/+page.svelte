@@ -44,7 +44,7 @@
 		<h2>Deling</h2>
 		<p>Vi deler ikke personopplysninger med tredjeparter, med unntak av:</p>
 		<ul>
-			<li>Resend (e-posttjeneste) for utsendelse av bekreftelser og påminnelser</li>
+			<li>SendGrid (e-posttjeneste) for utsendelse av bekreftelser og påminnelser</li>
 		</ul>
 	</section>
 
