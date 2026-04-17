@@ -9,7 +9,8 @@
 		{ href: '/admin', label: 'Dashboard' },
 		{ href: '/admin/arrangementer', label: 'Arrangementer' },
 		{ href: '/admin/pameldinger', label: 'Påmeldinger' },
-		{ href: '/admin/innhold', label: 'Innhold' }
+		{ href: '/admin/innhold', label: 'Innhold' },
+		{ href: '/admin/eposter', label: 'E-postmaler' }
 	];
 
 	async function handleLogout() {

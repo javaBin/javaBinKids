@@ -43,6 +43,13 @@
       "when": 1774258800000,
       "tag": "0005_add_submissions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776409200000,
+      "tag": "0006_add_email_templates",
+      "breakpoints": true
     }
   ]
 }

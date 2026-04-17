@@ -1,4 +1,15 @@
 import sgMail from '@sendgrid/mail';
+import {
+	getTemplate,
+	renderInline,
+	renderPlain,
+	renderParagraphs,
+	escapeHtml,
+	TEMPLATE_VARIABLES,
+	PREVIEW_VALUES,
+	type TemplateKey,
+	type EmailTemplateFields
+} from './emailTemplateService';
 
 let initialized = false;
 function getSendGrid() {
@@ -49,12 +60,12 @@ function emailLayout(content: string): string {
 </html>`;
 }
 
-function heading(text: string): string {
-	return `<h1 style="color:#E74C3C;font-size:20px;font-weight:bold;margin:0 0 16px 0;">${text}</h1>`;
+function heading(html: string): string {
+	return `<h1 style="color:#E74C3C;font-size:20px;font-weight:bold;margin:0 0 16px 0;">${html}</h1>`;
 }
 
-function paragraph(text: string): string {
-	return `<p style="color:#2D3748;font-size:15px;line-height:1.6;margin:0 0 12px 0;">${text}</p>`;
+function paragraph(html: string): string {
+	return `<p style="color:#2D3748;font-size:15px;line-height:1.6;margin:0 0 12px 0;">${html}</p>`;
 }
 
 function button(text: string, url: string): string {
@@ -66,6 +77,86 @@ function infoBox(label: string, value: string): string {
 		<div style="color:#6C757D;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${label}</div>
 		<div style="color:#2D3748;font-size:16px;font-weight:bold;">${value}</div>
 	</div>`;
+}
+
+function cancelLink(url: string): string {
+	return `<p style="color:#2D3748;font-size:15px;line-height:1.6;margin:12px 0 0 0;"><a href="${url}" style="color:#6C757D;font-size:13px;">Avmeld</a></p>`;
+}
+
+type RenderOptions = {
+	fields: EmailTemplateFields;
+	vars: Record<string, string | number>;
+	infoBoxes?: Array<{ label: string; value: string }>;
+	buttonUrl?: string;
+	cancelUrl?: string;
+};
+
+function renderHtml(opts: RenderOptions): { subject: string; html: string } {
+	const subject = renderPlain(opts.fields.subject, opts.vars);
+
+	const headingHtml = heading(renderInline(opts.fields.heading, opts.vars));
+	const introHtml = renderParagraphs(opts.fields.introText, opts.vars, paragraph);
+	const infoBoxesHtml = (opts.infoBoxes ?? [])
+		.map(({ label, value }) => infoBox(escapeHtml(label), escapeHtml(value)))
+		.join('');
+	const buttonHtml =
+		opts.buttonUrl && opts.fields.buttonText
+			? button(renderInline(opts.fields.buttonText, opts.vars), opts.buttonUrl)
+			: '';
+	const outroHtml = renderParagraphs(opts.fields.outroText, opts.vars, paragraph);
+	const cancelHtml = opts.cancelUrl ? cancelLink(opts.cancelUrl) : '';
+
+	const content = headingHtml + introHtml + infoBoxesHtml + buttonHtml + outroHtml + cancelHtml;
+
+	return { subject, html: emailLayout(content) };
+}
+
+export async function renderTemplatePreview(
+	key: TemplateKey,
+	fields: EmailTemplateFields
+): Promise<{ subject: string; html: string }> {
+	const allowedVars = TEMPLATE_VARIABLES[key];
+	const vars: Record<string, string | number> = {};
+	for (const name of allowedVars) {
+		vars[name] = PREVIEW_VALUES[name] ?? `{{${name}}}`;
+	}
+
+	const infoBoxes = previewInfoBoxes(key, vars);
+	const buttonUrl = fields.buttonText ? '#preview' : undefined;
+	const cancelUrl = templateHasCancel(key) ? '#preview' : undefined;
+
+	return renderHtml({ fields, vars, infoBoxes, buttonUrl, cancelUrl });
+}
+
+function previewInfoBoxes(
+	key: TemplateKey,
+	vars: Record<string, string | number>
+): Array<{ label: string; value: string }> {
+	switch (key) {
+		case 'confirmation':
+		case 'promotion':
+		case 'submissionApproved':
+			return [
+				{ label: 'Arrangement', value: String(vars.eventTitle ?? '') },
+				{ label: 'Dato', value: String(vars.eventDate ?? '') },
+				{ label: 'Kurs', value: String(vars.courseTitle ?? vars.title ?? '') }
+			];
+		case 'waitlist':
+			return [{ label: 'Posisjon på venteliste', value: String(vars.position ?? '') }];
+		case 'reminder':
+			return [
+				{ label: 'Arrangement', value: String(vars.eventTitle ?? '') },
+				{ label: 'Dato', value: String(vars.eventDate ?? '') },
+				{ label: 'Sted', value: String(vars.eventLocation ?? '') },
+				{ label: 'Kurs', value: String(vars.courseTitle ?? '') }
+			];
+		default:
+			return [];
+	}
+}
+
+function templateHasCancel(key: TemplateKey): boolean {
+	return key === 'confirmation' || key === 'waitlist';
 }
 
 export async function sendConfirmationEmail(params: {
@@ -81,19 +172,26 @@ export async function sendConfirmationEmail(params: {
 	const confirmUrl = `${BASE_URL}/bekreftelse/${params.registrationId}?token=${params.cancellationToken}`;
 	const cancelUrl = `${BASE_URL}/avmelding/${params.registrationId}?token=${params.cancellationToken}`;
 
-	await sendEmail({
-		to: params.parentEmail,
-		subject: `Påmelding bekreftet: ${params.courseTitle}`,
-		html: emailLayout(`
-			${heading(`Hei ${params.parentName}!`)}
-			${paragraph(`<strong>${params.childName}</strong> er nå påmeldt <strong>${params.courseTitle}</strong>.`)}
-			${infoBox('Arrangement', params.eventTitle)}
-			${infoBox('Dato', params.eventDate)}
-			${infoBox('Kurs', params.courseTitle)}
-			${button('Se bekreftelse', confirmUrl)}
-			${paragraph(`<a href="${cancelUrl}" style="color:#6C757D;font-size:13px;">Avmeld</a>`)}
-		`)
+	const fields = await getTemplate('confirmation');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			parentName: params.parentName,
+			childName: params.childName,
+			courseTitle: params.courseTitle,
+			eventTitle: params.eventTitle,
+			eventDate: params.eventDate
+		},
+		infoBoxes: [
+			{ label: 'Arrangement', value: params.eventTitle },
+			{ label: 'Dato', value: params.eventDate },
+			{ label: 'Kurs', value: params.courseTitle }
+		],
+		buttonUrl: confirmUrl,
+		cancelUrl
 	});
+
+	await sendEmail({ to: params.parentEmail, subject, html });
 }
 
 export async function sendWaitlistEmail(params: {
@@ -108,18 +206,21 @@ export async function sendWaitlistEmail(params: {
 	const confirmUrl = `${BASE_URL}/bekreftelse/${params.registrationId}?token=${params.cancellationToken}`;
 	const cancelUrl = `${BASE_URL}/avmelding/${params.registrationId}?token=${params.cancellationToken}`;
 
-	await sendEmail({
-		to: params.parentEmail,
-		subject: `Venteliste: ${params.courseTitle}`,
-		html: emailLayout(`
-			${heading(`Hei ${params.parentName}!`)}
-			${paragraph(`<strong>${params.childName}</strong> er satt på venteliste for <strong>${params.courseTitle}</strong>.`)}
-			${infoBox('Posisjon på venteliste', String(params.position))}
-			${paragraph('Du vil motta e-post dersom en plass blir ledig.')}
-			${button('Se status', confirmUrl)}
-			${paragraph(`<a href="${cancelUrl}" style="color:#6C757D;font-size:13px;">Avmeld</a>`)}
-		`)
+	const fields = await getTemplate('waitlist');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			parentName: params.parentName,
+			childName: params.childName,
+			courseTitle: params.courseTitle,
+			position: params.position
+		},
+		infoBoxes: [{ label: 'Posisjon på venteliste', value: String(params.position) }],
+		buttonUrl: confirmUrl,
+		cancelUrl
 	});
+
+	await sendEmail({ to: params.parentEmail, subject, html });
 }
 
 export async function sendPromotionEmail(params: {
@@ -130,18 +231,24 @@ export async function sendPromotionEmail(params: {
 	eventTitle: string;
 	eventDate: string;
 }) {
-	await sendEmail({
-		to: params.parentEmail,
-		subject: `Plass ledig: ${params.courseTitle}`,
-		html: emailLayout(`
-			${heading(`Gode nyheter, ${params.parentName}!`)}
-			${paragraph(`En plass har blitt ledig, og <strong>${params.childName}</strong> er nå bekreftet påmeldt <strong>${params.courseTitle}</strong>.`)}
-			${infoBox('Arrangement', params.eventTitle)}
-			${infoBox('Dato', params.eventDate)}
-			${infoBox('Kurs', params.courseTitle)}
-			${paragraph('Vi gleder oss til å se dere!')}
-		`)
+	const fields = await getTemplate('promotion');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			parentName: params.parentName,
+			childName: params.childName,
+			courseTitle: params.courseTitle,
+			eventTitle: params.eventTitle,
+			eventDate: params.eventDate
+		},
+		infoBoxes: [
+			{ label: 'Arrangement', value: params.eventTitle },
+			{ label: 'Dato', value: params.eventDate },
+			{ label: 'Kurs', value: params.courseTitle }
+		]
 	});
+
+	await sendEmail({ to: params.parentEmail, subject, html });
 }
 
 export async function sendCancellationEmail(params: {
@@ -150,15 +257,17 @@ export async function sendCancellationEmail(params: {
 	childName: string;
 	courseTitle: string;
 }) {
-	await sendEmail({
-		to: params.parentEmail,
-		subject: `Avmelding bekreftet: ${params.courseTitle}`,
-		html: emailLayout(`
-			${heading(`Hei ${params.parentName}!`)}
-			${paragraph(`Påmeldingen for <strong>${params.childName}</strong> til <strong>${params.courseTitle}</strong> er nå avbestilt.`)}
-			${paragraph('Dersom dette var en feil, kan du melde deg på igjen via nettsiden.')}
-		`)
+	const fields = await getTemplate('cancellation');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			parentName: params.parentName,
+			childName: params.childName,
+			courseTitle: params.courseTitle
+		}
 	});
+
+	await sendEmail({ to: params.parentEmail, subject, html });
 }
 
 export async function sendReminderEmail(params: {
@@ -170,19 +279,26 @@ export async function sendReminderEmail(params: {
 	eventDate: string;
 	eventLocation: string;
 }) {
-	await sendEmail({
-		to: params.parentEmail,
-		subject: `Påminnelse: ${params.courseTitle} nærmer seg!`,
-		html: emailLayout(`
-			${heading(`Hei ${params.parentName}!`)}
-			${paragraph(`Vi minner om at <strong>${params.childName}</strong> er påmeldt <strong>${params.courseTitle}</strong>.`)}
-			${infoBox('Arrangement', params.eventTitle)}
-			${infoBox('Dato', params.eventDate)}
-			${infoBox('Sted', params.eventLocation)}
-			${infoBox('Kurs', params.courseTitle)}
-			${paragraph('Vi gleder oss til å se dere!')}
-		`)
+	const fields = await getTemplate('reminder');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			parentName: params.parentName,
+			childName: params.childName,
+			courseTitle: params.courseTitle,
+			eventTitle: params.eventTitle,
+			eventDate: params.eventDate,
+			eventLocation: params.eventLocation
+		},
+		infoBoxes: [
+			{ label: 'Arrangement', value: params.eventTitle },
+			{ label: 'Dato', value: params.eventDate },
+			{ label: 'Sted', value: params.eventLocation },
+			{ label: 'Kurs', value: params.courseTitle }
+		]
 	});
+
+	await sendEmail({ to: params.parentEmail, subject, html });
 }
 
 export async function sendSubmissionReceivedEmail(params: {
@@ -197,17 +313,19 @@ export async function sendSubmissionReceivedEmail(params: {
 }) {
 	const editUrl = `${BASE_URL}/arrangementer/${params.arrangementId}/innlegg/${params.submissionId}/rediger?token=${params.editToken}`;
 
-	await sendEmail({
-		to: params.speakerEmail,
-		subject: `Forslag mottatt: ${params.title}`,
-		html: emailLayout(`
-			${heading(`Hei ${params.speakerName}!`)}
-			${paragraph(`Vi har mottatt forslaget ditt <strong>${params.title}</strong> til <strong>${params.eventTitle}</strong>.`)}
-			${paragraph(`Du kan redigere forslaget ditt frem til <strong>${params.submissionDeadline}</strong>.`)}
-			${button('Rediger forslaget', editUrl)}
-			${paragraph('Du vil få beskjed på e-post når forslaget er vurdert.')}
-		`)
+	const fields = await getTemplate('submissionReceived');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			speakerName: params.speakerName,
+			title: params.title,
+			eventTitle: params.eventTitle,
+			submissionDeadline: params.submissionDeadline
+		},
+		buttonUrl: editUrl
 	});
+
+	await sendEmail({ to: params.speakerEmail, subject, html });
 }
 
 export async function sendSubmissionApprovedEmail(params: {
@@ -217,18 +335,23 @@ export async function sendSubmissionApprovedEmail(params: {
 	eventTitle: string;
 	eventDate: string;
 }) {
-	await sendEmail({
-		to: params.speakerEmail,
-		subject: `Forslag godkjent: ${params.title}`,
-		html: emailLayout(`
-			${heading(`Gratulerer, ${params.speakerName}!`)}
-			${paragraph(`Forslaget ditt <strong>${params.title}</strong> er godkjent og blir med på <strong>${params.eventTitle}</strong>.`)}
-			${infoBox('Arrangement', params.eventTitle)}
-			${infoBox('Dato', params.eventDate)}
-			${infoBox('Kurs', params.title)}
-			${paragraph('Vi gleder oss til å se deg!')}
-		`)
+	const fields = await getTemplate('submissionApproved');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			speakerName: params.speakerName,
+			title: params.title,
+			eventTitle: params.eventTitle,
+			eventDate: params.eventDate
+		},
+		infoBoxes: [
+			{ label: 'Arrangement', value: params.eventTitle },
+			{ label: 'Dato', value: params.eventDate },
+			{ label: 'Kurs', value: params.title }
+		]
 	});
+
+	await sendEmail({ to: params.speakerEmail, subject, html });
 }
 
 export async function sendSubmissionRejectedEmail(params: {
@@ -237,13 +360,15 @@ export async function sendSubmissionRejectedEmail(params: {
 	title: string;
 	eventTitle: string;
 }) {
-	await sendEmail({
-		to: params.speakerEmail,
-		subject: `Forslag ikke tatt med: ${params.title}`,
-		html: emailLayout(`
-			${heading(`Hei ${params.speakerName}`)}
-			${paragraph(`Takk for forslaget ditt <strong>${params.title}</strong> til <strong>${params.eventTitle}</strong>.`)}
-			${paragraph('Dessverre har vi ikke mulighet til å ta med dette forslaget denne gangen. Vi håper du vil sende inn forslag igjen ved en senere anledning!')}
-		`)
+	const fields = await getTemplate('submissionRejected');
+	const { subject, html } = renderHtml({
+		fields,
+		vars: {
+			speakerName: params.speakerName,
+			title: params.title,
+			eventTitle: params.eventTitle
+		}
 	});
+
+	await sendEmail({ to: params.speakerEmail, subject, html });
 }

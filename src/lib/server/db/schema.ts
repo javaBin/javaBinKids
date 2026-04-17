@@ -100,6 +100,16 @@ export const images = pgTable('images', {
 	createdAt: timestamp().notNull().defaultNow()
 });
 
+export const emailTemplates = pgTable('emailTemplates', {
+	templateKey: text().primaryKey(),
+	subject: text().notNull().default(''),
+	heading: text().notNull().default(''),
+	introText: text().notNull().default(''),
+	outroText: text().notNull().default(''),
+	buttonText: text(),
+	updatedAt: timestamp().notNull().defaultNow().$onUpdate(() => new Date())
+});
+
 export const contactCards = pgTable('contactCards', {
 	contactCardId: uuid().primaryKey().defaultRandom(),
 	title: text().notNull(),

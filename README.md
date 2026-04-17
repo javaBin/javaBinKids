@@ -87,15 +87,152 @@ src/
 
 ### Tabeller
 
-| Tabell          | Beskrivelse |
-|-----------------|-------------|
-| `events`        | Arrangementer med dato, sted, registreringsperiode |
-| `courses`       | Kurs innenfor et arrangement (aldersgruppe, kapasitet) |
-| `registrations` | Påmeldinger med status (confirmed/waitlisted/cancelled) |
-| `adminUsers`    | Admin-brukere (opprettet via seed) |
-| `sessions`      | Admin-sesjoner (cookie-basert) |
-| `siteContent`   | Nøkkel/verdi-par for redigerbart sideinnhold |
-| `contactCards`  | Kontaktkort for kontaktsiden |
+Drizzle-skjemaet ligger i `src/lib/server/db/schema.ts`. Alle `timestamp`-kolonner lagres uten tidssone, alle UUID-kolonner er `gen_random_uuid()`-defaulted der ikke annet er spesifisert.
+
+#### `events`
+
+Arrangementer — én rad per javaBin Kids-dag (f.eks. "javaBin Kids Vår 2026"). Kurs og forslag henger under et arrangement.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `arrangementId` | uuid, PK | Unik ID |
+| `title` | text | Visningstittel |
+| `description` | text | Markdown-beskrivelse |
+| `date` | timestamp | Dato for arrangementet |
+| `location` | text | Sted/adresse |
+| `cancelled` | boolean | Om arrangementet er avlyst |
+| `registrationOpens` | timestamp | Start for påmelding |
+| `registrationCloses` | timestamp | Slutt for påmelding |
+| `imageUrl` | text, nullable | URL til forsidebilde (fra `images`-tabellen eller ekstern) |
+| `openForSubmissions` | boolean | Om åpent for innsending av kursforslag |
+| `submissionDeadline` | timestamp, nullable | Frist for innsending av forslag |
+| `createdAt`, `updatedAt` | timestamp | Auto |
+
+#### `courses`
+
+Kurs som arrangeres innenfor et gitt arrangement. Hvert kurs har egen alders- og kapasitetsgrense.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `courseId` | uuid, PK | Unik ID |
+| `arrangementId` | uuid, FK → `events` | Hvilket arrangement kurset tilhører (`ON DELETE RESTRICT`) |
+| `title` | text | Kurstittel |
+| `introduction` | text | Kort introduksjonstekst |
+| `description` | text | Fullstendig Markdown-beskrivelse |
+| `thumbnailUrl` | text, nullable | URL til thumbnail |
+| `ageMin`, `ageMax` | integer | Aldersgruppe (inkluderende) |
+| `maxParticipants` | integer | Maks antall påmeldte før venteliste |
+| `createdAt`, `updatedAt` | timestamp | Auto |
+
+#### `submissions`
+
+Kursforslag sendt inn av eksterne foredragsholdere via forslagsskjemaet. Går gjennom admin-vurdering (`submitted` → `approved`/`rejected`).
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `submissionId` | uuid, PK | Unik ID |
+| `arrangementId` | uuid, FK → `events` | Hvilket arrangement forslaget er sendt til |
+| `status` | text | `submitted`, `approved` eller `rejected` |
+| `title` | text | Kurstittel |
+| `description` | text | Markdown-beskrivelse |
+| `equipmentRequirements` | text, nullable | Utstyrsbehov |
+| `ageMin`, `ageMax` | integer | Foreslått aldersgruppe |
+| `maxParticipants` | integer | Foreslått maks antall |
+| `speakerName` | text | Foredragsholders navn |
+| `speakerEmail` | text | E-post (brukes til mottatt/godkjent/avvist-mail) |
+| `speakerBio` | text | Kort bio |
+| `editToken` | uuid | Token i redigeringslenke, lar foredragsholder endre forslaget uten innlogging |
+| `createdAt`, `updatedAt` | timestamp | Auto |
+
+#### `registrations`
+
+Påmeldinger fra foreldre til et spesifikt kurs. Unik på `(courseId, parentEmail, childName)` for å hindre duplikater.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `registrationId` | uuid, PK | Unik ID |
+| `courseId` | uuid, FK → `courses` | Kurset barnet meldes på |
+| `parentName` | text | Forelders navn |
+| `parentEmail` | text | E-post (brukes til bekreftelse/påminnelse) |
+| `parentPhone` | text | Telefonnummer |
+| `childName` | text | Barnets navn |
+| `childAge` | integer | Barnets alder |
+| `status` | text | `confirmed`, `waitlisted` eller `cancelled` |
+| `waitlistPosition` | integer, nullable | Posisjon på venteliste (1 = først i køen); `null` for confirmed/cancelled |
+| `consentGiven` | boolean | Om samtykke til databehandling er gitt |
+| `cancellationToken` | uuid | Token i bekreftelse/avmeldings-lenke — gjør at forelder kan avmelde uten innlogging |
+| `createdAt`, `updatedAt` | timestamp | Auto |
+
+#### `adminUsers`
+
+Admin-brukere som kan logge inn i admin-panelet. Opprettes via `npm run db:seed`.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `adminUserId` | uuid, PK | Unik ID |
+| `username` | text, unique | Brukernavn |
+| `passwordHash` | text | bcrypt-hash av passord |
+| `createdAt` | timestamp | Auto |
+
+#### `sessions`
+
+Aktive admin-sesjoner. Sesjons-ID-en lagres som HTTP-cookie og valideres på hver admin-request.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `sessionId` | uuid, PK | ID som lagres i cookien |
+| `adminUserId` | uuid, FK → `adminUsers` | Hvilken bruker sesjonen tilhører |
+| `expiresAt` | timestamp | Utløp (typisk 24 timer etter innlogging) |
+| `createdAt` | timestamp | Auto |
+
+#### `siteContent`
+
+Nøkkel/verdi-tekst som admin kan redigere fra `/admin/innhold`. Brukes for forside-hero, om-siden osv.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `key` | text, PK | Identifikator, f.eks. `hero_title`, `om_content` |
+| `content` | text | Fritekst/Markdown |
+| `updatedAt` | timestamp | Auto |
+
+#### `images`
+
+Binær-lagring av opplastede bilder (thumbnails, forsidebilder). Serveres via `/api/images/{imageId}` som bruker `mimeType` som `Content-Type`.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `imageId` | uuid, PK | Unik ID (del av serve-URL) |
+| `filename` | text | Opprinnelig filnavn |
+| `mimeType` | text | `image/jpeg`, `image/png`, osv. |
+| `data` | bytea | Rå bilde-bytes |
+| `createdAt` | timestamp | Auto |
+
+#### `emailTemplates`
+
+Redigerbare e-postmaler for de åtte transaksjonelle e-postene (bekreftelse, venteliste, forslag-godkjent, osv.). Hvis en rad mangler eller et felt er tomt, faller `email.ts` tilbake på hardkodet default. Tekstfelter kan inneholde `{{variabel}}`-plassholdere og `**fet tekst**`.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `templateKey` | text, PK | Én av `confirmation`, `waitlist`, `promotion`, `cancellation`, `reminder`, `submissionReceived`, `submissionApproved`, `submissionRejected` |
+| `subject` | text | Emnelinje |
+| `heading` | text | Overskrift i e-post-kroppen |
+| `introText` | text | Paragrafer før info-bokser (tom linje = ny paragraf) |
+| `outroText` | text | Paragrafer etter knapp/info-bokser |
+| `buttonText` | text, nullable | CTA-knappens tekst (kun for maler med knapp) |
+| `updatedAt` | timestamp | Auto |
+
+#### `contactCards`
+
+Kontaktkort som vises på kontaktsiden, administreres fra `/admin/innhold`.
+
+| Kolonne | Type | Beskrivelse |
+|---|---|---|
+| `contactCardId` | uuid, PK | Unik ID |
+| `title` | text | Kort-tittel |
+| `actionType` | text | `email`, `link` eller `phone` |
+| `actionValue` | text | E-post, URL eller telefonnummer |
+| `sortOrder` | integer | Visningsrekkefølge (stigende) |
+| `createdAt`, `updatedAt` | timestamp | Auto |
 
 ### Migreringer
 
