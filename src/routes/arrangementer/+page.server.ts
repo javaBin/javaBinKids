@@ -14,7 +14,9 @@ export async function load() {
 	);
 
 	const now = new Date();
-	const upcoming = withHtml.filter((e) => new Date(e.date) >= now && !e.cancelled);
+	const upcoming = withHtml
+		.filter((e) => new Date(e.date) >= now && !e.cancelled)
+		.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 	const past = withHtml.filter((e) => new Date(e.date) < now && !e.cancelled);
 	const cancelled = withHtml.filter((e) => e.cancelled);
 
